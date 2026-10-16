@@ -1,0 +1,4 @@
+services:
+  web:
+    image: demo-web-custom:latest
+    command: ["npm", "start"]

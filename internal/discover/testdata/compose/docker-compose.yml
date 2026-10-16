@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:16
+    container_name: demo-db
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it}
+  redis:
+    image: redis:7
+    container_name: demo-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+  api:
+    build:
+      context: ./backend
+    container_name: demo-api
+    ports:
+      - "${API_PORT:-8000}:8000"
+    env_file:
+      - .env
+  feishu-webhook:
+    profiles:
+      - feishu
+    container_name: demo-feishu
+    ports:
+      - "3001:3001"
+  web:
+    container_name: demo-web
+  nginx:
+    image: nginx:alpine
+    container_name: demo-nginx
+    ports:
+      - "${WEB_PORT:-80}:80"
+      - "${WEB_SSL_PORT:-443}:443"
