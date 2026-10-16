@@ -1,0 +1,11 @@
+# Go build outputs
+/bin/
+*.exe
+*.test
+*.out
+
+# AgentDock runtime state (per-repo, generated)
+.agentdock/
+
+# OS
+.DS_Store
