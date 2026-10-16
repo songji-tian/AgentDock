@@ -27,6 +27,11 @@ func New(dir, slug string) (*config.Dock, error) {
 	if !validSlug(slug) {
 		return nil, fmt.Errorf("invalid slug %q (use lowercase letters, digits and hyphens)", slug)
 	}
+	abs, err := absDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	dir = abs
 	cfg, err := config.Load(dir)
 	if err != nil {
 		return nil, fmt.Errorf("load config (run `agentdock init` first): %w", err)
@@ -76,6 +81,11 @@ func New(dir, slug string) (*config.Dock, error) {
 
 // Up validates the dock's config then starts it (fail-closed).
 func Up(dir, slug string) error {
+	abs, err := absDir(dir)
+	if err != nil {
+		return err
+	}
+	dir = abs
 	d, err := loadDock(dir, slug)
 	if err != nil {
 		return err
@@ -120,6 +130,11 @@ func Up(dir, slug string) error {
 
 // Down stops the dock's containers.
 func Down(dir, slug string) error {
+	abs, err := absDir(dir)
+	if err != nil {
+		return err
+	}
+	dir = abs
 	d, err := loadDock(dir, slug)
 	if err != nil {
 		return err
@@ -149,6 +164,11 @@ func Down(dir, slug string) error {
 // Clean removes the dock's worktree and reclaims its ledger entry (fail-closed
 // if the dock is still up).
 func Clean(dir, slug string) error {
+	abs, err := absDir(dir)
+	if err != nil {
+		return err
+	}
+	dir = abs
 	d, err := loadDock(dir, slug)
 	if err != nil {
 		return err
@@ -197,6 +217,16 @@ func loadDock(dir, slug string) (*config.Dock, error) {
 		return nil, fmt.Errorf("no dock %q — run `agentdock new %s` first", slug, slug)
 	}
 	return d, nil
+}
+
+// absDir resolves dir to an absolute path so downstream relative paths
+// (worktree, compose -f flags, .env symlink) stay consistent whether the user
+// passed a relative --dir (the CLI default is ".") or not.
+func absDir(dir string) (string, error) {
+	if filepath.IsAbs(dir) {
+		return dir, nil
+	}
+	return filepath.Abs(dir)
 }
 
 // nextPortBase returns the first host port of the next dock's block: one stride
@@ -259,6 +289,16 @@ func supplyEnv(repoDir, worktree string) error {
 	src := filepath.Join(repoDir, ".env")
 	if _, err := os.Stat(src); err != nil {
 		return nil // no .env in the repo; compose defaults must suffice
+	}
+	// The symlink target must be absolute: a relative target is resolved
+	// against the symlink's own directory (the worktree), so a relative
+	// `--dir .` would produce a self-referential, broken link.
+	if !filepath.IsAbs(src) {
+		abs, err := filepath.Abs(src)
+		if err != nil {
+			return err
+		}
+		src = abs
 	}
 	dst := filepath.Join(worktree, ".env")
 	if _, err := os.Lstat(dst); err == nil {
