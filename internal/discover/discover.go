@@ -85,6 +85,13 @@ func findDefaultFiles(dir string) []string {
 	return files
 }
 
+// DefaultFiles returns the compose file set that `docker compose up` auto-loads
+// (one base file + one override file, in merge order). The dock engine passes
+// these (plus its own override) to `docker compose` explicitly.
+func DefaultFiles(dir string) []string {
+	return findDefaultFiles(dir)
+}
+
 // parseServices reads one compose file and returns service name -> raw node.
 func parseServices(path string) (map[string]*yaml.Node, error) {
 	data, err := os.ReadFile(path)

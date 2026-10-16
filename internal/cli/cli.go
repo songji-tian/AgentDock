@@ -1,4 +1,4 @@
-// Package cli wires the agentdock subcommands (discover, init, ...).
+// Package cli wires the agentdock subcommands (discover, init, new, up, down, clean).
 package cli
 
 import (
@@ -12,6 +12,7 @@ import (
 
 	"github.com/songji-tian/agentdock/internal/config"
 	"github.com/songji-tian/agentdock/internal/discover"
+	"github.com/songji-tian/agentdock/internal/dock"
 )
 
 // Run dispatches os.Args (after the program name).
@@ -25,6 +26,14 @@ func Run(args []string) error {
 		return runDiscover(args[1:])
 	case "init":
 		return runInit(args[1:])
+	case "new":
+		return runNew(args[1:])
+	case "up":
+		return runUp(args[1:])
+	case "down":
+		return runDown(args[1:])
+	case "clean":
+		return runClean(args[1:])
 	case "help", "-h", "--help":
 		printUsage(os.Stdout)
 		return nil
@@ -116,6 +125,74 @@ func runInit(args []string) error {
 	return nil
 }
 
+func runNew(args []string) error {
+	fs := flag.NewFlagSet("new", flag.ContinueOnError)
+	dir := fs.String("dir", ".", "repository directory")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return fmt.Errorf("usage: agentdock new [--dir DIR] SLUG")
+	}
+	d, err := dock.New(*dir, fs.Arg(0))
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "✓ dock %q created\n", d.Slug)
+	fmt.Fprintf(os.Stderr, "  branch:   %s\n", d.Branch)
+	fmt.Fprintf(os.Stderr, "  worktree: %s\n", d.Worktree)
+	fmt.Fprintf(os.Stderr, "  portBase: %d\n", d.PortBase)
+	return nil
+}
+
+func runUp(args []string) error {
+	fs := flag.NewFlagSet("up", flag.ContinueOnError)
+	dir := fs.String("dir", ".", "repository directory")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return fmt.Errorf("usage: agentdock up [--dir DIR] SLUG")
+	}
+	if err := dock.Up(*dir, fs.Arg(0)); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "✓ dock %q is up\n", fs.Arg(0))
+	return nil
+}
+
+func runDown(args []string) error {
+	fs := flag.NewFlagSet("down", flag.ContinueOnError)
+	dir := fs.String("dir", ".", "repository directory")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return fmt.Errorf("usage: agentdock down [--dir DIR] SLUG")
+	}
+	if err := dock.Down(*dir, fs.Arg(0)); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "✓ dock %q is down\n", fs.Arg(0))
+	return nil
+}
+
+func runClean(args []string) error {
+	fs := flag.NewFlagSet("clean", flag.ContinueOnError)
+	dir := fs.String("dir", ".", "repository directory")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return fmt.Errorf("usage: agentdock clean [--dir DIR] SLUG")
+	}
+	if err := dock.Clean(*dir, fs.Arg(0)); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "✓ dock %q removed\n", fs.Arg(0))
+	return nil
+}
+
 func dash(s string) string {
 	if s == "" {
 		return "-"
@@ -130,6 +207,10 @@ Usage:
   agentdock discover [--dir DIR] [--json]   read the compose stack (facts, no guessing)
   agentdock init     [--dir DIR] [--project NAME] [--from FILE]
                                              write .agentdock/config.json (empty by default)
+  agentdock new      [--dir DIR] SLUG        create a worktree + port block + override
+  agentdock up       [--dir DIR] SLUG        validate then start the dock (fail-closed)
+  agentdock down     [--dir DIR] SLUG        stop the dock
+  agentdock clean    [--dir DIR] SLUG        remove the dock (refuses if still up)
 
 This is an agent-driven tool: register agent/AGENT.md with your coding agent and
 let it drive these commands. Do not memorise flags — that is the wrong path.

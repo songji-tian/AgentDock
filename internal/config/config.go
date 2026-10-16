@@ -4,6 +4,9 @@
 // comes from discovery (`agentdock discover`) via `init --from`. This is the fix
 // for eff-agent-si's original bug, where config.Default() silently wrote four
 // guessed services (api/web/db/redis) regardless of the actual stack.
+//
+// PortBase/PortStride are configuration defaults, NOT guesses about the
+// project: they only shape how host ports are allocated for isolated docks.
 package config
 
 import (
@@ -14,6 +17,12 @@ import (
 
 const DirName = ".agentdock"
 const FileName = "config.json"
+
+// DefaultPortBase is where the first dock's host ports start.
+const DefaultPortBase = 41000
+
+// DefaultPortStride is the gap between consecutive docks' port blocks.
+const DefaultPortStride = 200
 
 // Service is one discovered compose service.
 type Service struct {
@@ -28,14 +37,21 @@ type Service struct {
 
 // Config is the whole .agentdock/config.json.
 type Config struct {
-	Version  int       `json:"version"`
-	Project  string    `json:"project"`
-	Services []Service `json:"services"`
+	Version    int       `json:"version"`
+	Project    string    `json:"project"`
+	PortBase   int       `json:"port_base"`
+	PortStride int       `json:"port_stride"`
+	Services   []Service `json:"services"`
 }
 
 // Default returns an empty config. No services, no guesses.
 func Default() Config {
-	return Config{Version: 1, Services: []Service{}}
+	return Config{
+		Version:    1,
+		PortBase:   DefaultPortBase,
+		PortStride: DefaultPortStride,
+		Services:   []Service{},
+	}
 }
 
 // Save writes the config under dir/.agentdock/config.json.
@@ -61,5 +77,20 @@ func Load(dir string) (Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return cfg, err
 	}
+	cfg.normalize()
 	return cfg, nil
+}
+
+// normalize fills zero-value fields with defaults (covers configs written by
+// older versions or with missing fields).
+func (c *Config) normalize() {
+	if c.PortBase <= 0 {
+		c.PortBase = DefaultPortBase
+	}
+	if c.PortStride <= 0 {
+		c.PortStride = DefaultPortStride
+	}
+	if c.Services == nil {
+		c.Services = []Service{}
+	}
 }
