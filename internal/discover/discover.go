@@ -114,7 +114,13 @@ func parseServices(path string) (map[string]*yaml.Node, error) {
 }
 
 func extractService(name string, node *yaml.Node) config.Service {
-	s := config.Service{Name: name}
+	s := config.Service{
+		Name:        name,
+		Ports:       []string{},
+		Profiles:    []string{},
+		EnvFiles:    []string{},
+		RequiredEnv: []string{},
+	}
 	if node == nil || node.Kind != yaml.MappingNode {
 		return s
 	}

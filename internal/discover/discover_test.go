@@ -50,6 +50,9 @@ func TestDiscover(t *testing.T) {
 	if web == nil {
 		t.Fatal("web missing")
 	}
+	if web.Ports == nil {
+		t.Error("web.Ports must be non-nil so JSON emits [] not null")
+	}
 	if len(web.Ports) != 0 {
 		t.Errorf("web should have no exposed ports, got %v", web.Ports)
 	}
