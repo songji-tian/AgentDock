@@ -11,7 +11,7 @@ your coding agent (Codex / Claude Code / Cursor / OpenCode / …)
         │  reads
         ▼
   agent/AGENT.md      ← who it is, the one rule, the skill index
-  agent/skills/*      ← bootstrap · develop · diagnose · reclaim
+  agent/skills/*      ← bootstrap · develop · diagnose · reclaim · finish
         │  drives
         ▼
   agentdock           ← the deterministic engine (the agent's "hands")

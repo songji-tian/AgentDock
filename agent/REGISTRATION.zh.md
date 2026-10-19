@@ -11,7 +11,7 @@ AgentDock **不是你要 import 的库**——它是你**装进 coding agent 上
         │ 读
         ▼
   agent/AGENT.md         身份 + 铁律（"永不猜"）
-  agent/skills/*         流程（bootstrap / develop / diagnose / reclaim）
+  agent/skills/*         流程（bootstrap / develop / diagnose / reclaim / finish）
         │ 驱动
         ▼
   agentdock 引擎         执行 + 校验

@@ -30,6 +30,7 @@ do not work around it.
 | `develop` | Opening a dock for a task (new → up), working in it, tearing it down |
 | `diagnose` | Something failed — read state and logs before retrying |
 | `reclaim` | A dock is finished — tear it down cleanly |
+| `finish` | Deliver a dock's work: submit it, merge it back, then reclaim |
 
 Read the relevant `SKILL.md` before acting. Do not rely on memory of them.
 

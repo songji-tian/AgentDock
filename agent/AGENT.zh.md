@@ -26,6 +26,7 @@
 - `skills/develop/SKILL.md` — 为任务开一个 dock、在里面干活、保持隔离。
 - `skills/diagnose/SKILL.md` — 环境起不来时定位问题。
 - `skills/reclaim/SKILL.md` — 任务结束回收 dock。
+- `skills/finish/SKILL.md` — 任务收尾：交付成果、合回主线、回收环境。
 
 ## 不确定时
 

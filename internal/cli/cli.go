@@ -14,6 +14,7 @@ import (
 	"github.com/songji-tian/agentdock/internal/config"
 	"github.com/songji-tian/agentdock/internal/discover"
 	"github.com/songji-tian/agentdock/internal/dock"
+	"github.com/songji-tian/agentdock/internal/flow"
 	"github.com/songji-tian/agentdock/internal/ops"
 )
 
@@ -44,6 +45,10 @@ func Run(args []string) error {
 		return runGC(args[1:])
 	case "reclaim":
 		return runReclaim(args[1:])
+	case "submit":
+		return runSubmit(args[1:])
+	case "merge":
+		return runMerge(args[1:])
 	case "help", "-h", "--help":
 		printUsage(os.Stdout)
 		return nil
@@ -305,6 +310,61 @@ func runReclaim(args []string) error {
 	return nil
 }
 
+func runSubmit(args []string) error {
+	fs := flag.NewFlagSet("submit", flag.ContinueOnError)
+	dir := fs.String("dir", ".", "repository directory")
+	target := fs.String("target", "local", "local | github")
+	remote := fs.String("remote", "", "remote URL/name for the push (github target)")
+	visibility := fs.String("visibility", "private", "private | public (only when creating a repo)")
+	msg := fs.String("m", "", "commit message")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return fmt.Errorf("usage: agentdock submit [--target local|github] [--remote URL] [--visibility private|public] [-m MSG] SLUG")
+	}
+	res, err := flow.Submit(*dir, fs.Arg(0), flow.SubmitOpts{
+		Target: *target, Remote: *remote, Visibility: *visibility, Message: *msg,
+	})
+	if err != nil {
+		return err
+	}
+	if res.Pushed {
+		what := "pushed"
+		if res.Created {
+			what = "repo created + pushed"
+		}
+		fmt.Fprintf(os.Stderr, "✓ dock %q submitted: %s %s → %s (%s)\n", fs.Arg(0), res.Commit, res.Branch, res.RemoteURL, what)
+	} else {
+		fmt.Fprintf(os.Stderr, "✓ dock %q committed: %s on %s\n", fs.Arg(0), res.Commit, res.Branch)
+	}
+	return nil
+}
+
+func runMerge(args []string) error {
+	fs := flag.NewFlagSet("merge", flag.ContinueOnError)
+	dir := fs.String("dir", ".", "repository directory")
+	mode := fs.String("mode", "direct", "direct | pr")
+	remote := fs.String("remote", "", "remote URL/name for the PR")
+	base := fs.String("base", "main", "target branch")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return fmt.Errorf("usage: agentdock merge [--mode direct|pr] [--remote URL] [--base MAIN] SLUG")
+	}
+	res, err := flow.Merge(*dir, fs.Arg(0), flow.MergeOpts{Mode: *mode, Remote: *remote, Base: *base})
+	if err != nil {
+		return err
+	}
+	if res.Mode == "pr" {
+		fmt.Fprintf(os.Stderr, "✓ PR opened: %s\n", res.PRURL)
+	} else {
+		fmt.Fprintf(os.Stderr, "✓ merged into %s at %s\n", *base, res.Commit)
+	}
+	return nil
+}
+
 func dash(s string) string {
 	if s == "" {
 		return "-"
@@ -327,6 +387,8 @@ Usage:
   agentdock diagnose [--dir DIR] [SLUG]      check dock consistency (read-only)
   agentdock gc       [--dir DIR] [--yes]     find (and with --yes reclaim) garbage docks
   agentdock reclaim  [--dir DIR] SLUG        stop + clean a finished dock in one shot
+  agentdock submit   [--target local|github] [--remote URL] [--visibility private|public] [-m MSG] SLUG
+  agentdock merge    [--mode direct|pr] [--remote URL] [--base MAIN] SLUG
 
 This is an agent-driven tool: register agent/AGENT.md with your coding agent and
 let it drive these commands. Do not memorise flags — that is the wrong path.
