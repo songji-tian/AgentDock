@@ -14,16 +14,27 @@ stack — so parallel tasks never collide.
   non-empty. If it is missing or a placeholder, stop and run the `bootstrap`
   skill — do **not** proceed with a guessed list.
 - Confirm the dock name (`<slug>`) with the human once.
+- If `config.auth.detected` is true, the project has admin login. Ask the human
+  how to set this dock's admin username/password **before** `new`. Never invent
+  credentials.
 
 ## 2. Open the dock
 
 ```sh
-agentdock new <slug>
+agentdock new --admin-user <user> --admin-password <password> <slug>
+```
+
+or, only if the human explicitly accepts the default:
+
+```sh
+agentdock new --use-default-auth <slug>   # admin / admin&798Ad
 ```
 
 The engine creates the worktree, assigns a port range from its slot model, and
-writes the override (container names `songji-<slug>-*`). It refuses if the
-config is incomplete — read the refusal, do not work around it.
+writes the override (container names `songji-<slug>-*`) plus this dock's own
+`.env` — a copy of the repo's, with the admin username/password keys overridden
+by the values above. If `config.auth.detected` is true and you pass no
+credentials, the engine refuses — surface that refusal, do not work around it.
 
 ## 3. Start the stack
 

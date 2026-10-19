@@ -47,6 +47,11 @@ Read the relevant `SKILL.md` before acting. Do not rely on memory of them.
 6. Never take a destructive action (clean, down that removes data) "to be
    helpful". The engine refuses; surface the refusal, ask the human.
 7. When unsure, ask the human **one** focused question.
+8. **Never invent admin credentials.** If the project has account login (the
+   `bootstrap` skill detects it and records `auth` in the config), ask the
+   human how to set the dock's admin username/password at `new` time. Pass them
+   via `--admin-user` / `--admin-password`, or use `--use-default-auth` only
+   when the human explicitly accepts `admin` / `admin&798Ad`.
 
 ## The contract with the engine
 

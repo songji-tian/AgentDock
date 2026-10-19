@@ -128,13 +128,20 @@ func runInit(args []string) error {
 func runNew(args []string) error {
 	fs := flag.NewFlagSet("new", flag.ContinueOnError)
 	dir := fs.String("dir", ".", "repository directory")
+	adminUser := fs.String("admin-user", "", "admin username for this dock (optional; pairs with --admin-password)")
+	adminPass := fs.String("admin-password", "", "admin password for this dock (required if the project has login auth)")
+	useDefault := fs.Bool("use-default-auth", false, "use default admin credentials (admin / admin&798Ad)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return fmt.Errorf("usage: agentdock new [--dir DIR] SLUG")
+		return fmt.Errorf("usage: agentdock new [--dir DIR] [--admin-user U] [--admin-password P | --use-default-auth] SLUG")
 	}
-	d, err := dock.New(*dir, fs.Arg(0))
+	d, err := dock.New(*dir, fs.Arg(0), dock.AuthCreds{
+		UseDefault: *useDefault,
+		Username:   *adminUser,
+		Password:   *adminPass,
+	})
 	if err != nil {
 		return err
 	}

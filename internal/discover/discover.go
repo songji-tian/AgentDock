@@ -29,13 +29,14 @@ var overrideNames = []string{
 }
 
 type Result struct {
-	Files    []string         `json:"files"`
-	Services []config.Service `json:"services"`
+	Files       []string         `json:"files"`
+	Services    []config.Service `json:"services"`
+	AuthSignals []string         `json:"auth_signals,omitempty"`
 }
 
 // Discover parses the default compose file set in dir (one base file plus one
 // override file, matching what `docker compose up` auto-loads) and returns the
-// merged service list.
+// merged service list, plus soft admin-login signals (for the agent to confirm).
 func Discover(dir string) (*Result, error) {
 	files := findDefaultFiles(dir)
 	if len(files) == 0 {
@@ -63,6 +64,7 @@ func Discover(dir string) (*Result, error) {
 	for _, name := range names {
 		res.Services = append(res.Services, extractService(name, merged[name]))
 	}
+	res.AuthSignals = AuthSignals(dir)
 	return res, nil
 }
 
@@ -266,4 +268,84 @@ func scalar(n *yaml.Node) string {
 		return ""
 	}
 	return n.Value
+}
+
+// authEnvKeys are admin-login env var names used as a soft heuristic. They are
+// NOT the authoritative detection (the agent records that in config auth) — they
+// only let the engine warn when the agent forgot to mark auth.
+var authEnvKeys = []string{
+	"ADMIN_PASSWORD", "ADMIN_USERNAME", "ADMIN_USER", "ADMIN_EMAIL",
+	"SUPERUSER_PASSWORD", "SUPERUSER_USERNAME", "SUPERUSER_USER",
+	"INITIAL_ADMIN_PASSWORD", "INITIAL_ADMIN_USERNAME",
+	"DJANGO_SUPERUSER_PASSWORD", "DJANGO_SUPERUSER_USERNAME", "DJANGO_SUPERUSER_EMAIL",
+}
+
+// authKeyRes are word-boundary regexps for authEnvKeys, so ADMIN_USER does not
+// false-positive inside ADMIN_USERNAME.
+var authKeyRes = func() map[string]*regexp.Regexp {
+	m := make(map[string]*regexp.Regexp, len(authEnvKeys))
+	for _, k := range authEnvKeys {
+		m[k] = regexp.MustCompile(`\b` + regexp.QuoteMeta(k) + `\b`)
+	}
+	return m
+}()
+
+// AuthSignals reports which known admin-login signals are present under dir.
+// It reports signal names only (never values) and is a soft hint, not the
+// source of truth: the authoritative detection is the agent's own reading.
+func AuthSignals(dir string) []string {
+	found := map[string]bool{}
+
+	// 1. The repo's .env (keys only — never values).
+	if data, err := os.ReadFile(filepath.Join(dir, ".env")); err == nil {
+		for _, k := range authEnvKeys {
+			if strings.Contains(string(data), k+"=") {
+				found["env:"+k] = true
+			}
+		}
+	}
+
+	// 2. Compose files referencing auth keys (environment / env_file / ${...}).
+	for _, f := range DefaultFiles(dir) {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		for k, re := range authKeyRes {
+			if re.Match(data) {
+				found["compose:"+k] = true
+			}
+		}
+	}
+
+	// 3. Seed/superuser scripts (filename heuristic).
+	_ = filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
+		if err != nil || info == nil {
+			return nil
+		}
+		if info.IsDir() {
+			if p != dir {
+				switch info.Name() {
+				case ".git", ".agentdock", "node_modules", "__pycache__", "venv", ".venv":
+					return filepath.SkipDir
+				}
+			}
+			return nil
+		}
+		name := strings.ToLower(info.Name())
+		if (strings.Contains(name, "seed") || strings.Contains(name, "superuser")) &&
+			(strings.HasSuffix(name, ".py") || strings.HasSuffix(name, ".sh") ||
+				strings.HasSuffix(name, ".sql") || strings.HasSuffix(name, ".rb") ||
+				strings.HasSuffix(name, ".go")) {
+			found["script:"+info.Name()] = true
+		}
+		return nil
+	})
+
+	out := make([]string, 0, len(found))
+	for k := range found {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }

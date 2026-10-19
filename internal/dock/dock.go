@@ -23,7 +23,7 @@ const overrideFileName = "docker-compose.agentdock.yml"
 
 // New creates a workstation: validates config, allocates a port block, creates
 // a git worktree, writes the compose override and supplies .env.
-func New(dir, slug string) (*config.Dock, error) {
+func New(dir, slug string, creds AuthCreds) (*config.Dock, error) {
 	if !validSlug(slug) {
 		return nil, fmt.Errorf("invalid slug %q (use lowercase letters, digits and hyphens)", slug)
 	}
@@ -39,6 +39,14 @@ func New(dir, slug string) (*config.Dock, error) {
 	if len(cfg.Services) == 0 {
 		return nil, fmt.Errorf("no services in config — run `agentdock discover` + `agentdock init --from` first")
 	}
+
+	// Auth fail-closed: the engine never invents admin credentials. When the
+	// project has login, New must have been told the credentials explicitly.
+	username, password, err := resolveAuth(cfg, creds)
+	if err != nil {
+		return nil, err
+	}
+	warnAuthHints(cfg, dir)
 
 	st, err := config.LoadState(dir)
 	if err != nil {
@@ -60,7 +68,7 @@ func New(dir, slug string) (*config.Dock, error) {
 	if err := writeOverride(worktree, cfg.Project, slug, cfg.Services, alloc); err != nil {
 		return nil, err
 	}
-	if err := supplyEnv(dir, worktree); err != nil {
+	if err := supplyEnv(dir, worktree, cfg.Auth, username, password); err != nil {
 		return nil, err
 	}
 
@@ -94,10 +102,14 @@ func Up(dir, slug string) error {
 	if err != nil {
 		return err
 	}
-	// Re-supply .env (idempotent): the repo's .env may have appeared or been
-	// rotated after `new`; the worktree needs it for required vars.
-	if err := supplyEnv(dir, d.Worktree); err != nil {
-		return err
+	// Re-supply .env only if the dock's is missing (the repo's may have appeared
+	// after `new`). Never clobber an existing .env: it holds the credentials the
+	// user chose at `new` time.
+	envPath := filepath.Join(d.Worktree, ".env")
+	if _, err := os.Lstat(envPath); os.IsNotExist(err) {
+		if err := supplyEnv(dir, d.Worktree, cfg.Auth, "", ""); err != nil {
+			return err
+		}
 	}
 	files, err := composeFiles(d.Worktree)
 	if err != nil {
@@ -282,36 +294,114 @@ func writeOverride(worktree, project, slug string, services []config.Service, al
 	return os.WriteFile(filepath.Join(worktree, overrideFileName), []byte(b.String()), 0o644)
 }
 
-// supplyEnv makes the repo's .env visible inside the worktree (it is normally
-// gitignored, so a fresh worktree lacks it and required vars like
-// POSTGRES_PASSWORD would be missing). Symlink so both always agree.
-func supplyEnv(repoDir, worktree string) error {
-	src := filepath.Join(repoDir, ".env")
-	if _, err := os.Stat(src); err != nil {
-		return nil // no .env in the repo; compose defaults must suffice
-	}
-	// The symlink target must be absolute: a relative target is resolved
-	// against the symlink's own directory (the worktree), so a relative
-	// `--dir .` would produce a self-referential, broken link.
-	if !filepath.IsAbs(src) {
-		abs, err := filepath.Abs(src)
-		if err != nil {
-			return err
+// AuthCreds are the admin credentials the agent passes to New after asking the
+// human. The engine never invents them.
+type AuthCreds struct {
+	UseDefault bool
+	Username   string
+	Password   string
+}
+
+// Default admin credentials, used only when the user explicitly opts in with
+// --use-default-auth. The '&' is a literal password character.
+const (
+	defaultAuthUser     = "admin"
+	defaultAuthPassword = "admin&798Ad"
+)
+
+// resolveAuth turns AuthCreds into the username/password to inject, refusing
+// (fail-closed) when the project has admin login but no credentials were given.
+func resolveAuth(cfg config.Config, creds AuthCreds) (username, password string, err error) {
+	if cfg.Auth == nil || !cfg.Auth.Detected {
+		if creds.UseDefault || creds.Username != "" || creds.Password != "" {
+			fmt.Fprintf(os.Stderr, "⚠  auth not detected in config; ignoring --admin-* flags\n")
 		}
-		src = abs
+		return "", "", nil
 	}
+	switch {
+	case creds.UseDefault:
+		return defaultAuthUser, defaultAuthPassword, nil
+	case creds.Password != "":
+		return creds.Username, creds.Password, nil
+	default:
+		return "", "", fmt.Errorf("this project has admin login (auth.detected) and AgentDock never invents credentials. " +
+			"Ask the user, then re-run with --admin-password (optionally --admin-user), or --use-default-auth (admin / admin&798Ad)")
+	}
+}
+
+// warnAuthHints prints a soft warning when admin-login signals exist but the
+// agent did not mark config auth. It is a backstop, not a hard block: the
+// authoritative detection is the agent's own reading of the project.
+func warnAuthHints(cfg config.Config, dir string) {
+	if cfg.Auth != nil && cfg.Auth.Detected {
+		return
+	}
+	sigs := discover.AuthSignals(dir)
+	if len(sigs) == 0 {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "⚠  admin-login signals found but config auth.detected is false: %s\n", strings.Join(sigs, ", "))
+	fmt.Fprintf(os.Stderr, "   If this project has login, the agent should mark config auth before relying on isolation.\n")
+}
+
+// supplyEnv writes the dock's .env snapshot: the repo's .env with the admin
+// username/password keys overridden by the credentials chosen at `new` time.
+// It always writes, so a tracked .env in the repo can't leak the repo's admin
+// password into the dock.
+func supplyEnv(repoDir, worktree string, auth *config.Auth, username, password string) error {
+	src := filepath.Join(repoDir, ".env")
 	dst := filepath.Join(worktree, ".env")
-	if _, err := os.Lstat(dst); err == nil {
-		return nil // already present (tracked or supplied earlier)
-	}
-	if err := os.Symlink(src, dst); err != nil {
+
+	var content []byte
+	if _, err := os.Stat(src); err == nil {
 		data, rerr := os.ReadFile(src)
 		if rerr != nil {
 			return rerr
 		}
-		return os.WriteFile(dst, data, 0o600)
+		content = data
 	}
-	return nil
+
+	if auth != nil && auth.Detected {
+		if auth.PasswordEnv != "" && password != "" {
+			content = setEnvKey(content, auth.PasswordEnv, password)
+		}
+		if auth.UsernameEnv != "" && username != "" {
+			content = setEnvKey(content, auth.UsernameEnv, username)
+		}
+	}
+
+	if content == nil {
+		// No repo .env and no credentials to inject: nothing to supply.
+		return nil
+	}
+	return os.WriteFile(dst, content, 0o600)
+}
+
+// setEnvKey sets KEY=value in env-file content, replacing an existing line or
+// appending a new one. Values are written verbatim (no shell interpretation).
+func setEnvKey(content []byte, key, value string) []byte {
+	s := strings.TrimRight(string(content), "\n")
+	var lines []string
+	if s != "" {
+		lines = strings.Split(s, "\n")
+	}
+	match := key + "="
+	replaced := false
+	for i, line := range lines {
+		t := strings.TrimSpace(line)
+		if strings.HasPrefix(t, "export ") {
+			t = strings.TrimSpace(strings.TrimPrefix(t, "export "))
+		}
+		if t == key || strings.HasPrefix(t, match) {
+			lines[i] = key + "=" + value
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		lines = append(lines, key+"="+value)
+	}
+	return []byte(strings.Join(lines, "\n") + "\n")
 }
 
 // composeFiles returns the worktree's compose file set (base + repo override)

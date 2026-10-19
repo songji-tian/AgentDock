@@ -35,6 +35,17 @@ type Service struct {
 	RequiredEnv   []string `json:"required_env"`
 }
 
+// Auth describes a project's admin-login mechanism. It is recorded by the
+// agent (after reading the project), never guessed by the engine. When Detected
+// is true, the dock engine refuses to create a workstation without explicit
+// credentials (--admin-password / --use-default-auth).
+type Auth struct {
+	Detected    bool   `json:"detected"`
+	PasswordEnv string `json:"password_env,omitempty"`
+	UsernameEnv string `json:"username_env,omitempty"`
+	SeedHint    string `json:"seed_hint,omitempty"`
+}
+
 // Config is the whole .agentdock/config.json.
 type Config struct {
 	Version    int       `json:"version"`
@@ -42,6 +53,7 @@ type Config struct {
 	PortBase   int       `json:"port_base"`
 	PortStride int       `json:"port_stride"`
 	Services   []Service `json:"services"`
+	Auth       *Auth     `json:"auth,omitempty"`
 }
 
 // Default returns an empty config. No services, no guesses.
