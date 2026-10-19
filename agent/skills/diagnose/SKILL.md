@@ -13,13 +13,24 @@ Goal: turn a failure into facts before acting. Never retry blind.
 engine correctly refusing an incomplete or unsafe request — the fix is to
 complete the request, not to bypass the engine.
 
-## 2. Read state, then logs
+## 2. Run the read-only checks
+
+```sh
+agentdock capacity          # port ledger + free space
+agentdock diagnose [SLUG]   # per-dock consistency (read-only, never mutates)
+```
+
+`diagnose` reports `ok` / `warn` / `err` findings: worktree presence, compose
+override presence, `.env` presence, ledger status. Treat `err` as a blocker;
+`warn` means "will be fixed on the next `up`".
+
+## 3. Read state, then logs
 
 - `.agentdock/state.json` — what ports/slug/worktree this dock owns.
 - `docker compose ps` / `docker ps` — what is actually running.
 - `docker compose logs <service>` — why a service did not come up.
 
-## 3. Verify before changing anything
+## 4. Verify before changing anything
 
 - Is the port actually free? (Ask the engine, do not guess.)
 - Is the required variable set? (`${VAR:?...}` will say which one.)

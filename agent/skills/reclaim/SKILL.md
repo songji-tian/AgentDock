@@ -7,20 +7,31 @@ description: Tear a finished dock down cleanly and give its ports/worktree back.
 
 Goal: leave nothing running and nothing reserved that is not in use.
 
-## 1. Stop, then clean
+## 1. One-shot reclaim
 
 ```sh
-agentdock down
-agentdock clean
+agentdock reclaim SLUG
 ```
 
-`clean` refuses if the stack is still running — stop first. That refusal is a
-feature, not a nuisance.
+Stops the dock (if still up) and then cleans it in one shot. `clean` alone
+refuses while the stack is still running — that refusal is a feature, not a
+nuisance.
 
-## 2. Verify nothing remains
+## 2. Batch garbage collection
 
-- No containers with the dock's name prefix (`songji-<slug>-*`).
-- No ports reserved in the ledger.
-- The worktree is removed.
+```sh
+agentdock gc          # list garbage docks (dry run, safe)
+agentdock gc --yes    # actually reclaim them
+```
 
-If anything remains, run `diagnose` before trying again.
+`gc` only reclaims docks it can prove are not running. Anything it cannot
+verify (docker unavailable, no compose files) is left alone and reported
+separately — never destroyed on a guess.
+
+## 3. Verify nothing remains
+
+- `agentdock capacity` — the ledger no longer reserves the dock's ports.
+- `agentdock diagnose SLUG` — should report the dock is gone.
+- No containers with the dock's name prefix (`<project>-<slug>-*`).
+
+If anything remains, read the `diagnose` output before trying again.

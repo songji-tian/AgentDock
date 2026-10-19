@@ -28,7 +28,7 @@ func TestWriteOverrideUsesOverrideTag(t *testing.T) {
 	if err := writeOverride(dir, "MyProject", "demo", services, alloc); err != nil {
 		t.Fatal(err)
 	}
-	b, err := os.ReadFile(filepath.Join(dir, overrideFileName))
+	b, err := os.ReadFile(filepath.Join(dir, OverrideFileName))
 	if err != nil {
 		t.Fatal(err)
 	}

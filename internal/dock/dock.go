@@ -19,7 +19,7 @@ import (
 	"github.com/songji-tian/agentdock/internal/ports"
 )
 
-const overrideFileName = "docker-compose.agentdock.yml"
+const OverrideFileName = "docker-compose.agentdock.yml"
 
 // New creates a workstation: validates config, allocates a port block, creates
 // a git worktree, writes the compose override and supplies .env.
@@ -291,7 +291,7 @@ func writeOverride(worktree, project, slug string, services []config.Service, al
 			}
 		}
 	}
-	return os.WriteFile(filepath.Join(worktree, overrideFileName), []byte(b.String()), 0o644)
+	return os.WriteFile(filepath.Join(worktree, OverrideFileName), []byte(b.String()), 0o644)
 }
 
 // AuthCreds are the admin credentials the agent passes to New after asking the
@@ -412,7 +412,7 @@ func composeFiles(worktree string) ([]string, error) {
 		return nil, fmt.Errorf("no compose file found in %s", worktree)
 	}
 	files := append([]string(nil), base...)
-	files = append(files, filepath.Join(worktree, overrideFileName))
+	files = append(files, filepath.Join(worktree, OverrideFileName))
 	return files, nil
 }
 
@@ -428,4 +428,30 @@ func dockerCompose(project string, files []string, sub string, subArgs ...string
 	args = append(args, sub)
 	args = append(args, subArgs...)
 	return exec.Command("docker", args...)
+}
+
+// Running reports whether the dock's compose project has any running
+// containers. verified is false when the running state cannot be determined
+// (docker unavailable, or the worktree has no compose files) — callers must
+// treat an unverified dock as unknown, never as "not running".
+func Running(dir string, d config.Dock) (running, verified bool) {
+	if _, err := exec.LookPath("docker"); err != nil {
+		return false, false
+	}
+	cfg, err := config.Load(dir)
+	if err != nil {
+		return false, false
+	}
+	files, err := composeFiles(d.Worktree)
+	if err != nil {
+		return false, false
+	}
+	ps := dockerCompose(projectName(cfg.Project, d.Slug), files, "ps", "-q")
+	ps.Dir = d.Worktree
+	out, err := ps.Output()
+	if err != nil {
+		// Docker is reachable but the project is not running / not created.
+		return false, true
+	}
+	return strings.TrimSpace(string(out)) != "", true
 }

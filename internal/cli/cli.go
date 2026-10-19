@@ -1,4 +1,5 @@
-// Package cli wires the agentdock subcommands (discover, init, new, up, down, clean).
+// Package cli wires the agentdock subcommands (discover, init, new, up, down,
+// clean, capacity, diagnose, gc, reclaim).
 package cli
 
 import (
@@ -13,6 +14,7 @@ import (
 	"github.com/songji-tian/agentdock/internal/config"
 	"github.com/songji-tian/agentdock/internal/discover"
 	"github.com/songji-tian/agentdock/internal/dock"
+	"github.com/songji-tian/agentdock/internal/ops"
 )
 
 // Run dispatches os.Args (after the program name).
@@ -34,6 +36,14 @@ func Run(args []string) error {
 		return runDown(args[1:])
 	case "clean":
 		return runClean(args[1:])
+	case "capacity":
+		return runCapacity(args[1:])
+	case "diagnose":
+		return runDiagnose(args[1:])
+	case "gc":
+		return runGC(args[1:])
+	case "reclaim":
+		return runReclaim(args[1:])
 	case "help", "-h", "--help":
 		printUsage(os.Stdout)
 		return nil
@@ -200,6 +210,101 @@ func runClean(args []string) error {
 	return nil
 }
 
+func runCapacity(args []string) error {
+	fs := flag.NewFlagSet("capacity", flag.ContinueOnError)
+	dir := fs.String("dir", ".", "repository directory")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	c, err := ops.CapacityReport(*dir)
+	if err != nil {
+		return err
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintf(w, "PORT BASE\t%d\n", c.PortBase)
+	fmt.Fprintf(w, "PORT STRIDE\t%d\n", c.PortStride)
+	fmt.Fprintf(w, "DOCKS\t%d\n", len(c.Docks))
+	fmt.Fprintf(w, "NEXT BASE\t%d\n", c.NextBase)
+	fmt.Fprintf(w, "BLOCKS LEFT\t%d\n", c.BlocksLeft)
+	w.Flush()
+	if len(c.Docks) > 0 {
+		fmt.Fprintln(os.Stdout)
+		w2 := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(w2, "SLUG\tSTATUS\tPORT_BASE\tPUBLISHED_PORTS")
+		for _, r := range c.Docks {
+			fmt.Fprintf(w2, "%s\t%s\t%d\t%d\n", r.Slug, r.Status, r.PortBase, r.Ports)
+		}
+		w2.Flush()
+	}
+	return nil
+}
+
+func runDiagnose(args []string) error {
+	fs := flag.NewFlagSet("diagnose", flag.ContinueOnError)
+	dir := fs.String("dir", ".", "repository directory")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() > 1 {
+		return fmt.Errorf("usage: agentdock diagnose [--dir DIR] [SLUG]")
+	}
+	slug := ""
+	if fs.NArg() == 1 {
+		slug = fs.Arg(0)
+	}
+	findings, err := ops.Diagnose(*dir, slug)
+	if err != nil {
+		return err
+	}
+	for _, f := range findings {
+		fmt.Printf("%-5s %-12s %s\n", f.Status, f.Slug, f.Detail)
+	}
+	return nil
+}
+
+func runGC(args []string) error {
+	fs := flag.NewFlagSet("gc", flag.ContinueOnError)
+	dir := fs.String("dir", ".", "repository directory")
+	yes := fs.Bool("yes", false, "actually reclaim the garbage (default: list only)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	items, err := ops.GC(*dir, *yes)
+	if err != nil {
+		return err
+	}
+	if len(items) == 0 {
+		fmt.Fprintln(os.Stderr, "✓ no garbage found")
+		return nil
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "SLUG\tKIND\tDETAIL")
+	for _, it := range items {
+		fmt.Fprintf(w, "%s\t%s\t%s\n", it.Slug, it.Kind, it.Detail)
+	}
+	w.Flush()
+	if !*yes {
+		fmt.Fprintln(os.Stderr, "\n# dry run — pass --yes to actually reclaim these")
+	}
+	return nil
+}
+
+func runReclaim(args []string) error {
+	fs := flag.NewFlagSet("reclaim", flag.ContinueOnError)
+	dir := fs.String("dir", ".", "repository directory")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return fmt.Errorf("usage: agentdock reclaim [--dir DIR] SLUG")
+	}
+	if err := ops.Reclaim(*dir, fs.Arg(0)); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "✓ dock %q reclaimed\n", fs.Arg(0))
+	return nil
+}
+
 func dash(s string) string {
 	if s == "" {
 		return "-"
@@ -218,6 +323,10 @@ Usage:
   agentdock up       [--dir DIR] SLUG        validate then start the dock (fail-closed)
   agentdock down     [--dir DIR] SLUG        stop the dock
   agentdock clean    [--dir DIR] SLUG        remove the dock (refuses if still up)
+  agentdock capacity [--dir DIR]             report the port ledger + free space
+  agentdock diagnose [--dir DIR] [SLUG]      check dock consistency (read-only)
+  agentdock gc       [--dir DIR] [--yes]     find (and with --yes reclaim) garbage docks
+  agentdock reclaim  [--dir DIR] SLUG        stop + clean a finished dock in one shot
 
 This is an agent-driven tool: register agent/AGENT.md with your coding agent and
 let it drive these commands. Do not memorise flags — that is the wrong path.
