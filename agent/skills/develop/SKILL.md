@@ -47,7 +47,10 @@ a broken stack. 80/443 are never used for a dock.
 
 ## 4. Work
 
-Work in the dock's worktree. Never edit the main checkout. If a port is
+Work only in this dock's worktree. Never edit the main checkout. Treat sibling
+worktrees and other docks as non-existent: do not read them, do not reference
+them, and never let another dock's state block or steer this task — conflicts
+are resolved later, at `merge`/`submit` time, never mid-task. If a port is
 unexpectedly taken, do **not** pick another by hand — ask the engine
 (`agentdock new`/slot model) so the ledger stays truthful.
 

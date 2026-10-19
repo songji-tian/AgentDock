@@ -52,6 +52,10 @@ Read the relevant `SKILL.md` before acting. Do not rely on memory of them.
    human how to set the dock's admin username/password at `new` time. Pass them
    via `--admin-user` / `--admin-password`, or use `--use-default-auth` only
    when the human explicitly accepts `admin` / `admin&798Ad`.
+9. **Work only in your dock's worktree.** Other worktrees and the main checkout
+   do not exist for you: do not read them, do not reference them, and never
+   treat another dock's state as a blocker or a decision input. Conflicts are
+   resolved at `merge`/`submit` time, not during development.
 
 ## The contract with the engine
 

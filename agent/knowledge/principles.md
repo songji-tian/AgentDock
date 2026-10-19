@@ -8,3 +8,6 @@
 - **Fail-closed.** The engine refuses incomplete or unsafe requests.
 - **One confirmation, then automation.** Confirm the service/port list and dock
   name once; derive the rest.
+- **One worktree, one task.** Inside a dock you work only in its worktree;
+  sibling worktrees and the main checkout are invisible to you. Conflicts are
+  deferred to merge time, never resolved mid-task.
