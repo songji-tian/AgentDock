@@ -68,6 +68,13 @@ git clone git@github.com:songji-tian/AgentDock.git ~/.agentdock/
 | `agentdock up` | 起栈（执行前校验，占位配置会被拒绝） |
 | `agentdock down` | 停栈 |
 | `agentdock clean` | 拆 dock |
+| `agentdock capacity` | 查看端口台账和剩余 dock 槽位 |
+| `agentdock diagnose` | 检查单个 dock 的一致性（worktree / override / .env / 台账） |
+| `agentdock gc [--yes]` | 找出（--yes 则回收）垃圾 dock |
+| `agentdock reclaim` | 一条命令停栈 + 拆 |
+| `agentdock submit` | 提交 dock 的成果；`--target github` 则推送 |
+| `agentdock merge` | 把 dock 分支合回主线（直接合并或开 PR） |
+| `agentdock version` | 打印版本 |
 
 ## 项目结构
 
@@ -80,9 +87,9 @@ docs/            规格（SPEC.md）与架构决策记录（adr/）
 
 ## 状态
 
-核心闭环（discover / init / new / up / down / clean）开发中。
-代码交付命令（submit / merge / reclaim）与运维辅助（diagnose / capacity / gc）
-计划在 v2。详见 [docs/SPEC.md](docs/SPEC.md)。
+核心闭环（discover / init / new / up / down / clean）已完成。
+代码交付（submit / merge / reclaim）与运维辅助（capacity / diagnose / gc）
+已实现。详见 [docs/SPEC.md](docs/SPEC.md)。
 
 ## 许可证
 

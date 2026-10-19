@@ -18,6 +18,8 @@ import (
 	"github.com/songji-tian/agentdock/internal/ops"
 )
 
+const version = "0.2.0"
+
 // Run dispatches os.Args (after the program name).
 func Run(args []string) error {
 	if len(args) == 0 {
@@ -49,6 +51,9 @@ func Run(args []string) error {
 		return runSubmit(args[1:])
 	case "merge":
 		return runMerge(args[1:])
+	case "version":
+		fmt.Fprintf(os.Stdout, "agentdock %s\n", version)
+		return nil
 	case "help", "-h", "--help":
 		printUsage(os.Stdout)
 		return nil

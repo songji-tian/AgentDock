@@ -36,10 +36,10 @@ your coding agent (Codex / Claude Code / Cursor / OpenCode / …)
         │  reads
         ▼
   agent/AGENT.md        ← who it is, what it must never do
-  agent/skills/         ← how to bootstrap / develop / diagnose / reclaim
+  agent/skills/         ← how to bootstrap / develop / diagnose / reclaim / finish
         │  drives
         ▼
-  agentdock (the engine)  ← deterministic execution: discover, new, up, down, clean
+  agentdock (the engine)  ← deterministic execution: discover · new · up · down · clean · submit · merge · capacity · diagnose · gc · reclaim
 ```
 
 The agent brings **judgement**. The engine brings **guarantees**. Keep them
@@ -108,6 +108,13 @@ need to memorise them; they are listed here for transparency and debugging.
 | `agentdock up` | Start the dock's stack (verifies first; refuses if incomplete) |
 | `agentdock down` | Stop the dock's stack |
 | `agentdock clean` | Tear down the worktree and reclaim ports |
+| `agentdock capacity` | Show the port ledger and how many dock slots remain |
+| `agentdock diagnose <slug>` | Check one dock's consistency (worktree / override / .env / ledger) |
+| `agentdock gc [--yes]` | Find (and with --yes reclaim) garbage docks |
+| `agentdock reclaim <slug>` | Stop + clean a finished dock in one shot |
+| `agentdock submit <slug>` | Commit the dock's work; `--target github` pushes it |
+| `agentdock merge <slug>` | Fold the dock's branch back (direct or PR) |
+| `agentdock version` | Print the version |
 
 ## Project layout
 
@@ -116,9 +123,9 @@ agent/          the agent half — instructions your coding agent reads
   AGENT.md      identity + the one rule + skill index
   REGISTRATION.md
   knowledge/    principles, pitfalls
-  skills/       bootstrap · develop · diagnose · reclaim
+  skills/       bootstrap · develop · diagnose · reclaim · finish
 cmd/agentdock/  the engine entry point
-internal/       engine implementation (cli, config, discover, ports, lifecycle, state)
+internal/       engine implementation (cli, config, discover, dock, flow, ops, ports, lifecycle, state)
 docs/           SPEC and architecture decision records
 ```
 
