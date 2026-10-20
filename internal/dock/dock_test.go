@@ -179,6 +179,43 @@ func TestSupplyEnvOverridesExistingTrackedEnv(t *testing.T) {
 	}
 }
 
+// TestSupplyEnvAppliesProjectOverrides: a committed .agentdock.env at the repo
+// root supplies dock-only values (e.g. Next dev origin allowlists), while the
+// user-chosen credentials still win.
+func TestSupplyEnvAppliesProjectOverrides(t *testing.T) {
+	root := t.TempDir()
+	repo := filepath.Join(root, "repo")
+	wt := filepath.Join(repo, "wt")
+	if err := os.MkdirAll(wt, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".env"), []byte("NEXT_ALLOWED_DEV_ORIGINS=\nADMIN_PASSWORD=old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".agentdock.env"), []byte(
+		"# dock-only overrides\nexport NEXT_ALLOWED_DEV_ORIGINS=127.0.0.1,localhost\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	auth := &config.Auth{Detected: true, PasswordEnv: "ADMIN_PASSWORD"}
+	if err := supplyEnv(repo, wt, auth, "", "admin&798Ad"); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(wt, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	if !strings.Contains(s, "NEXT_ALLOWED_DEV_ORIGINS=127.0.0.1,localhost") {
+		t.Fatalf("project override must be applied, got:\n%s", s)
+	}
+	if !strings.Contains(s, "ADMIN_PASSWORD=admin&798Ad") {
+		t.Fatalf("auth must still win over overrides, got:\n%s", s)
+	}
+	if strings.Contains(s, "ADMIN_PASSWORD=old") {
+		t.Fatalf("old credential must be replaced, got:\n%s", s)
+	}
+}
+
 func TestSetEnvKey(t *testing.T) {
 	cases := []struct {
 		name    string

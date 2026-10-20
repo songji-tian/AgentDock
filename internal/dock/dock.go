@@ -188,6 +188,17 @@ func Clean(dir, slug string) error {
 	if d.Status == "up" {
 		return fmt.Errorf("dock %q is up — run `agentdock down %s` first", slug, slug)
 	}
+	// Best effort: drop the compose project's volumes too. `down` keeps them so
+	// a stopped dock can resume, but `clean` is terminal — leaving volumes behind
+	// makes a future same-slug dock reuse half-initialized data (stale DB schema,
+	// old credentials).
+	if cfg, err := config.Load(dir); err == nil {
+		if files, err := composeFiles(d.Worktree); err == nil {
+			cmd := dockerCompose(projectName(cfg.Project, slug), files, "down", "-v")
+			cmd.Dir = d.Worktree
+			_ = cmd.Run()
+		}
+	}
 	rm := exec.Command("git", "-C", dir, "worktree", "remove", "--force", d.Worktree)
 	if out, err := rm.CombinedOutput(); err != nil {
 		return fmt.Errorf("git worktree remove: %w\n%s", err, out)
@@ -367,6 +378,15 @@ func supplyEnv(repoDir, worktree string, auth *config.Auth, username, password s
 		content = data
 	}
 
+	// Project-level dock overrides: a committed .agentdock.env at the repo root
+	// carries values that only make sense for an isolated dock (dev-server
+	// origin allowlists, local URLs...). Applied before auth so credentials win.
+	if ov, err := os.ReadFile(filepath.Join(repoDir, ".agentdock.env")); err == nil {
+		for _, kv := range envOverrides(ov) {
+			content = setEnvKey(content, kv[0], kv[1])
+		}
+	}
+
 	if auth != nil && auth.Detected {
 		if auth.PasswordEnv != "" && password != "" {
 			content = setEnvKey(content, auth.PasswordEnv, password)
@@ -408,6 +428,25 @@ func setEnvKey(content []byte, key, value string) []byte {
 		lines = append(lines, key+"="+value)
 	}
 	return []byte(strings.Join(lines, "\n") + "\n")
+}
+
+// envOverrides parses KEY=VALUE pairs from an env file, ignoring blank lines,
+// comments and an optional `export ` prefix. Values are kept verbatim.
+func envOverrides(data []byte) [][2]string {
+	var out [][2]string
+	for _, raw := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		key, value, ok := strings.Cut(line, "=")
+		if !ok || strings.TrimSpace(key) == "" {
+			continue
+		}
+		out = append(out, [2]string{strings.TrimSpace(key), value})
+	}
+	return out
 }
 
 // composeFiles returns the worktree's compose file set (base + repo override)
