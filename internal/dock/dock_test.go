@@ -1,6 +1,8 @@
 package dock
 
 import (
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -222,5 +224,32 @@ func TestResolveAuth(t *testing.T) {
 	u, p, err = resolveAuth(auth, AuthCreds{Username: "root", Password: "hunter2"})
 	if err != nil || u != "root" || p != "hunter2" {
 		t.Fatalf("user+pass = %q/%q, err=%v", u, p, err)
+	}
+}
+
+// TestNextPortBaseSkipsOccupiedBlock guards the cross-project port collision
+// fix: when the base block's ports are already bound on the host (by another
+// project's dock or an unrelated process), nextPortBase must advance a full
+// stride to the next block instead of reusing the occupied ports.
+func TestNextPortBaseSkipsOccupiedBlock(t *testing.T) {
+	const base = 60000
+	l, err := net.Listen("tcp", fmt.Sprintf(":%d", base))
+	if err != nil {
+		t.Skipf("cannot occupy port %d for test: %v", base, err)
+	}
+	defer l.Close()
+
+	cfg := config.Config{
+		PortBase:   base,
+		PortStride: 200,
+		Services: []config.Service{
+			{Name: "api", Ports: []string{"8000:8000"}},
+		},
+	}
+	st := config.State{}
+	got := nextPortBase(cfg, st)
+	want := base + 200
+	if got != want {
+		t.Errorf("nextPortBase = %d, want %d (must skip occupied block)", got, want)
 	}
 }

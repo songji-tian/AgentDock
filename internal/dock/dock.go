@@ -242,13 +242,19 @@ func absDir(dir string) (string, error) {
 }
 
 // nextPortBase returns the first host port of the next dock's block: one stride
-// past the highest block already in the ledger.
+// past the highest block already in the ledger, then advanced past any block
+// whose ports are already bound on the host (by another project's dock or any
+// unrelated process). This keeps independent workstations from colliding.
 func nextPortBase(cfg config.Config, st config.State) int {
 	base := cfg.PortBase
 	for _, d := range st.Docks {
 		if d.PortBase+cfg.PortStride > base {
 			base = d.PortBase + cfg.PortStride
 		}
+	}
+	n := ports.CountPublished(cfg.Services)
+	for !ports.BlockFree(base, n) {
+		base += cfg.PortStride
 	}
 	return base
 }

@@ -3,11 +3,49 @@ package ports
 
 import (
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 
 	"github.com/songji-tian/agentdock/internal/config"
 )
+
+// CountPublished returns how many host ports the services occupy once
+// Allocate runs. Container-only ports (no host side) consume no slot.
+func CountPublished(services []config.Service) int {
+	n := 0
+	for _, s := range services {
+		for _, p := range s.Ports {
+			if _, _, published := splitPort(p); published {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// PortFree reports whether a host TCP port is not currently bound. It binds
+// the port briefly and releases it, so true is a point-in-time observation
+// (a small TOCTOU window remains before Docker actually binds the port).
+func PortFree(port int) bool {
+	l, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return false
+	}
+	_ = l.Close()
+	return true
+}
+
+// BlockFree reports whether n consecutive host ports starting at base are all
+// unbound.
+func BlockFree(base, n int) bool {
+	for i := 0; i < n; i++ {
+		if !PortFree(base + i) {
+			return false
+		}
+	}
+	return true
+}
 
 // Allocate assigns consecutive host ports to each service's published ports,
 // processing services in name order (deterministic). Container-only ports
