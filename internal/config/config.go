@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const DirName = ".agentdock"
@@ -105,4 +106,35 @@ func (c *Config) normalize() {
 	if c.Services == nil {
 		c.Services = []Service{}
 	}
+}
+
+// EnsureGitignore appends the runtime state directory (".agentdock/") to
+// dir/.gitignore so it never dirties the repository's git status (which would
+// otherwise trip fail-closed checks like merge's dirty guard). Idempotent: a
+// second call is a no-op; a missing .gitignore is created.
+func EnsureGitignore(dir string) error {
+	path := filepath.Join(dir, ".gitignore")
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	entry := DirName + "/"
+	for _, line := range strings.Split(string(data), "\n") {
+		t := strings.TrimSpace(line)
+		if t == DirName || t == entry {
+			return nil // already ignored
+		}
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if len(data) > 0 && !strings.HasSuffix(string(data), "\n") {
+		if _, err := f.WriteString("\n"); err != nil {
+			return err
+		}
+	}
+	_, err = f.WriteString(entry + "\n")
+	return err
 }

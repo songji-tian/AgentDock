@@ -134,6 +134,9 @@ func runInit(args []string) error {
 	if err := cfg.Save(*dir); err != nil {
 		return err
 	}
+	if err := config.EnsureGitignore(*dir); err != nil {
+		return err
+	}
 
 	if len(cfg.Services) == 0 {
 		fmt.Fprintln(os.Stderr, "⚠  config written with 0 services (empty by design — AgentDock never guesses).")
