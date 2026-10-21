@@ -11,6 +11,7 @@ package register
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,6 +39,11 @@ const Block = BeginMarker + "\n" +
 	"\n" +
 	"<!-- Managed by `agentdock register` — edits inside this block are overwritten. -->\n" +
 	EndMarker
+
+// ErrIncompleteBlock means a begin marker has no matching end marker. Apply
+// and Remove refuse to touch such a file: the unclosed block would otherwise
+// be treated as extending to EOF, silently deleting the rest of the document.
+var ErrIncompleteBlock = errors.New("incomplete agentdock register block: begin marker without end marker")
 
 // FileStatus reports the registration state of one instruction file.
 type FileStatus struct {
@@ -67,6 +73,11 @@ func Apply(dir string) ([]FileStatus, error) {
 	if len(targets) == 0 {
 		targets = []string{DefaultFile}
 	}
+	type write struct {
+		path string
+		data []byte
+	}
+	var writes []write
 	var out []FileStatus
 	for _, name := range targets {
 		path := filepath.Join(dir, name)
@@ -75,10 +86,19 @@ func Apply(dir string) ([]FileStatus, error) {
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, err
 		}
-		if err := os.WriteFile(path, []byte(upsert(string(old))), 0o644); err != nil {
+		updated, err := upsert(string(old))
+		if err != nil {
+			// Fail before writing anything: a half-updated set of instruction
+			// files is worse than refusing the operation.
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
+		writes = append(writes, write{path: path, data: []byte(updated)})
+		out = append(out, FileStatus{File: name, Existed: existed, Registered: true})
+	}
+	for _, w := range writes {
+		if err := os.WriteFile(w.path, w.data, 0o644); err != nil {
 			return nil, err
 		}
-		out = append(out, FileStatus{File: name, Existed: existed, Registered: true})
 	}
 	return out, nil
 }
@@ -105,6 +125,12 @@ func Check(dir string) ([]FileStatus, error) {
 // Remove deletes the managed block from every instruction file that has one.
 // Content outside the markers is preserved verbatim.
 func Remove(dir string) ([]FileStatus, error) {
+	type write struct {
+		path    string
+		data    []byte
+		changed bool
+	}
+	var writes []write
 	var out []FileStatus
 	for _, name := range existingTargets(dir) {
 		path := filepath.Join(dir, name)
@@ -112,30 +138,39 @@ func Remove(dir string) ([]FileStatus, error) {
 		if err != nil {
 			return nil, err
 		}
-		updated := removeBlock(string(data))
-		if updated != string(data) {
-			if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
-				return nil, err
-			}
+		updated, err := removeBlock(string(data))
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
 		}
+		writes = append(writes, write{path: path, data: []byte(updated), changed: updated != string(data)})
 		out = append(out, FileStatus{File: name, Existed: true, Registered: hasBlock(updated)})
+	}
+	for _, w := range writes {
+		if !w.changed {
+			continue
+		}
+		if err := os.WriteFile(w.path, w.data, 0o644); err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
 }
 
-// upsert replaces an existing managed block in place, or prepends one.
-func upsert(content string) string {
+// upsert replaces an existing managed block in place, or prepends one. A begin
+// marker without an end marker is an error: rewriting such a file would drop
+// everything from the marker to EOF.
+func upsert(content string) (string, error) {
 	if i := strings.Index(content, BeginMarker); i >= 0 {
 		if j := strings.Index(content[i:], EndMarker); j >= 0 {
 			end := i + j + len(EndMarker)
-			return content[:i] + Block + content[end:]
+			return content[:i] + Block + content[end:], nil
 		}
-		return content[:i] + Block
+		return "", ErrIncompleteBlock
 	}
 	if strings.TrimSpace(content) == "" {
-		return Block + "\n"
+		return Block + "\n", nil
 	}
-	return Block + "\n\n" + content
+	return Block + "\n\n" + content, nil
 }
 
 // hasBlock reports whether content carries both markers, begin before end.
@@ -147,18 +182,17 @@ func hasBlock(content string) bool {
 	return strings.Index(content[i:], EndMarker) >= 0
 }
 
-// removeBlock deletes the managed block, keeping everything else.
-func removeBlock(content string) string {
+// removeBlock deletes the managed block, keeping everything else. An unclosed
+// block is an error rather than an implicit "delete to EOF".
+func removeBlock(content string) (string, error) {
 	i := strings.Index(content, BeginMarker)
 	if i < 0 {
-		return content
+		return content, nil
 	}
 	j := strings.Index(content[i:], EndMarker)
-	var rest string
 	if j < 0 {
-		rest = content[:i]
-	} else {
-		rest = content[:i] + content[i+j+len(EndMarker):]
+		return "", ErrIncompleteBlock
 	}
-	return strings.TrimLeft(rest, "\n")
+	rest := content[:i] + content[i+j+len(EndMarker):]
+	return strings.TrimLeft(rest, "\n"), nil
 }

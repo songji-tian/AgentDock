@@ -1,6 +1,7 @@
 package register
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -135,5 +136,42 @@ func TestRemoveRestoresOriginal(t *testing.T) {
 	}
 	if got := read(t, dir, "AGENTS.md"); got != "# P\n\nrules\n" {
 		t.Fatalf("remove did not restore original: %q", got)
+	}
+}
+
+func TestApplyRefusesIncompleteBlock(t *testing.T) {
+	dir := t.TempDir()
+	original := "# Project\n\nkeep me\n" + BeginMarker + "\nunclosed tail\n"
+	write(t, dir, "AGENTS.md", original)
+	if _, err := Apply(dir); !errors.Is(err, ErrIncompleteBlock) {
+		t.Fatalf("want ErrIncompleteBlock, got %v", err)
+	}
+	if got := read(t, dir, "AGENTS.md"); got != original {
+		t.Fatalf("file changed on refusal:\n got %q\nwant %q", got, original)
+	}
+}
+
+func TestRemoveRefusesIncompleteBlock(t *testing.T) {
+	dir := t.TempDir()
+	original := "# Project\n\nkeep me\n" + BeginMarker + "\nunclosed tail\n"
+	write(t, dir, "AGENTS.md", original)
+	if _, err := Remove(dir); !errors.Is(err, ErrIncompleteBlock) {
+		t.Fatalf("want ErrIncompleteBlock, got %v", err)
+	}
+	if got := read(t, dir, "AGENTS.md"); got != original {
+		t.Fatalf("file changed on refusal:\n got %q\nwant %q", got, original)
+	}
+}
+
+func TestApplyIncompleteBlockLeavesOtherFilesUntouched(t *testing.T) {
+	dir := t.TempDir()
+	good := "# A\n"
+	write(t, dir, "AGENTS.md", good)
+	write(t, dir, "CLAUDE.md", BeginMarker+"\nunclosed tail\n")
+	if _, err := Apply(dir); !errors.Is(err, ErrIncompleteBlock) {
+		t.Fatalf("want ErrIncompleteBlock, got %v", err)
+	}
+	if got := read(t, dir, "AGENTS.md"); got != good {
+		t.Fatalf("sibling file written before refusal: %q", got)
 	}
 }
