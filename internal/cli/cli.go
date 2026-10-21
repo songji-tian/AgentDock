@@ -16,6 +16,7 @@ import (
 	"github.com/songji-tian/agentdock/internal/dock"
 	"github.com/songji-tian/agentdock/internal/flow"
 	"github.com/songji-tian/agentdock/internal/ops"
+	"github.com/songji-tian/agentdock/internal/register"
 )
 
 const version = "0.2.0"
@@ -31,6 +32,8 @@ func Run(args []string) error {
 		return runDiscover(args[1:])
 	case "init":
 		return runInit(args[1:])
+	case "register":
+		return runRegister(args[1:])
 	case "new":
 		return runNew(args[1:])
 	case "up":
@@ -144,6 +147,52 @@ func runInit(args []string) error {
 		fmt.Fprintln(os.Stderr, "   Docks will refuse to start until services are discovered.")
 	} else {
 		fmt.Fprintf(os.Stderr, "✓ config written with %d services.\n", len(cfg.Services))
+	}
+	return nil
+}
+
+func runRegister(args []string) error {
+	fs := flag.NewFlagSet("register", flag.ContinueOnError)
+	dir := fs.String("dir", ".", "repository directory")
+	check := fs.Bool("check", false, "verify only; exit non-zero when not registered")
+	remove := fs.Bool("remove", false, "remove the managed block")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *check && *remove {
+		return fmt.Errorf("--check and --remove are mutually exclusive")
+	}
+
+	var (
+		statuses []register.FileStatus
+		err      error
+	)
+	switch {
+	case *check:
+		statuses, err = register.Check(*dir)
+	case *remove:
+		statuses, err = register.Remove(*dir)
+	default:
+		statuses, err = register.Apply(*dir)
+	}
+	if err != nil {
+		return err
+	}
+
+	missing := 0
+	for _, s := range statuses {
+		mark, state := "✓", "registered"
+		switch {
+		case *remove:
+			state = "managed block removed"
+		case !s.Registered:
+			mark, state = "✗", "NOT registered"
+			missing++
+		}
+		fmt.Fprintf(os.Stderr, "%s %s — %s\n", mark, s.File, state)
+	}
+	if *check && missing > 0 {
+		return fmt.Errorf("AgentDock is not registered in %s (run `agentdock register`)", *dir)
 	}
 	return nil
 }
@@ -387,6 +436,8 @@ Usage:
   agentdock discover [--dir DIR] [--json]   read the compose stack (facts, no guessing)
   agentdock init     [--dir DIR] [--project NAME] [--from FILE]
                                              write .agentdock/config.json (empty by default)
+  agentdock register [--dir DIR] [--check|--remove]
+                                             install/verify the agent pointer in AGENTS.md/CLAUDE.md
   agentdock new      [--dir DIR] SLUG        create a worktree + port block + override
   agentdock up       [--dir DIR] SLUG        validate then start the dock (fail-closed)
   agentdock down     [--dir DIR] SLUG        stop the dock

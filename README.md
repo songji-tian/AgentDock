@@ -59,14 +59,17 @@ agentdock version
 
 ### 2. Register the agent with your coding agent
 
-Keep a clone of this repository somewhere stable, e.g. `~/.agentdock/`, and put
-a one-line pointer in your project's root instruction file so your coding agent
-always loads it before doing environment work:
+Keep a clone of this repository somewhere stable, e.g. `~/.agentdock/`, then
+let the engine write the pointer for you:
 
-```markdown
-Before any worktree, port, environment, or Docker work, read
-~/.agentdock/agent/AGENT.md and follow its skills.
+```sh
+agentdock register --dir /path/to/your/project
+agentdock register --dir /path/to/your/project --check   # verify (CI-friendly)
 ```
+
+`register` writes a managed block into the project's `AGENTS.md` (and
+`CLAUDE.md` when it exists) pointing at `~/.agentdock/agent/AGENT.md`. The block
+is idempotent and removable (`--remove`); one command instead of hand-editing.
 
 Which file your runtime reads:
 
@@ -76,7 +79,8 @@ Which file your runtime reads:
 | Claude Code | `CLAUDE.md` / `.claude/` |
 | Cursor | `.cursor/rules/*.mdc` |
 
-See [agent/REGISTRATION.md](agent/REGISTRATION.md) for the full procedure.
+See [agent/REGISTRATION.md](agent/REGISTRATION.md) for the manual fallback and
+the full procedure.
 
 ### 3. Verify it registered
 
@@ -104,6 +108,7 @@ need to memorise them; they are listed here for transparency and debugging.
 |---|---|
 | `agentdock discover` | Parse the repo's compose and print the facts (services, ports, container names, required env) |
 | `agentdock init` | Create `.agentdock/` — empty; accepts `--from <facts>` |
+| `agentdock register` | Write (or verify with `--check`, remove with `--remove`) the agent pointer in `AGENTS.md` / `CLAUDE.md` |
 | `agentdock new <slug>` | Create a worktree + assign a port range + write the override |
 | `agentdock up` | Start the dock's stack (verifies first; refuses if incomplete) |
 | `agentdock down` | Stop the dock's stack |

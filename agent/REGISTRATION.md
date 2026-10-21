@@ -32,7 +32,19 @@ The agent brings judgement; the engine brings guarantees. Keep them separate.
 2. Keep this repository (or a clone of it) somewhere stable, e.g.
    `~/.agentdock/`.
 
-3. Tell your coding agent to read it. Almost every runtime supports one of:
+3. Run `agentdock register` in your project — it writes a managed pointer for
+   you:
+
+   ```sh
+   agentdock register --dir /path/to/your/project
+   agentdock register --dir /path/to/your/project --check   # verify (exit 1 = not registered)
+   ```
+
+   `register` targets `AGENTS.md` (all runtimes that read root instructions)
+   and `CLAUDE.md` when it exists (Claude Code). The marker-delimited block is
+   idempotent, so re-running is safe; `--remove` deletes it.
+
+   Almost every runtime also supports a vendor format we do not write:
 
    | Mechanism | File / location | Used by |
    |---|---|---|
@@ -41,16 +53,16 @@ The agent brings judgement; the engine brings guarantees. Keep them separate.
    | Rules directory | `.cursor/rules/*.mdc` | Cursor |
    | Skill directory | `.claude/skills/`, `skills/` | skill-aware runtimes |
 
-   The simplest universal bridge is a one-line pointer in your project's root
-   instruction file:
+   For those, paste the same pointer by hand:
 
    ```markdown
    Before any worktree, port, environment, or Docker work, read
    ~/.agentdock/agent/AGENT.md and follow its skills.
    ```
 
-4. Verify the agent actually loaded it. Ask: *"what is the one rule?"* A
-   registered AgentDock answers **"Never guess. Verify, or refuse."**
+4. Verify registration without asking anyone: `agentdock register --check`
+   must exit 0. Then ask the agent: *"what is the one rule?"* A registered
+   AgentDock answers **"Never guess. Verify, or refuse."**
 
 ## Repository-local vs global
 
